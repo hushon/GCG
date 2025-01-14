@@ -21,9 +21,9 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment_path', type=str, default='experiments')
     parser.add_argument('--seed', type=int, default=3407)
-    parser.add_argument('--local_rank', default=-1, type=int, help='node rank for distributed training')
+    parser.add_argument('--local_rank', default=0, type=int, help='node rank for distributed training')
 
-    parser.add_argument('--word_size', default=8, help="n_gpus")
+    parser.add_argument('--word_size', default=1, help="n_gpus")
     parser.add_argument('--bs', type=int, default=4)
     parser.add_argument('--eval_bs', type=int, default=4)
     parser.add_argument('--epoch', type=int, default=10)
@@ -81,13 +81,13 @@ def prepare_inputs(args, data):
 
     mc_prompt = "Considering the information presented in the frame, select the correct answer from the options."
 
-    if args.dataset == 'intentqa':
-        options_a0 = data["options_a0"]
-        options_a1 = data["options_a1"]
-        options_a2 = data["options_a2"]
-        options_a3 = data["options_a3"]
-        options_a4 = data["options_a4"]
-        text_input =  ['Question: ' + question + f'\nOptions: \nA: {option_a0} \nB: {option_a1} \nC: {option_a2} \nD: {option_a3} \nE: {option_a4}' + '\nAnswer: ' for question, option_a0, option_a1, option_a2, option_a3, option_a4 in zip(questions, options_a0, options_a1, options_a2, options_a3, options_a4)]
+    # if args.dataset == 'intentqa':
+    options_a0 = data["options_a0"]
+    options_a1 = data["options_a1"]
+    options_a2 = data["options_a2"]
+    options_a3 = data["options_a3"]
+    options_a4 = data["options_a4"]
+    text_input =  ['Question: ' + question + f'\nOptions: \nA: {option_a0} \nB: {option_a1} \nC: {option_a2} \nD: {option_a3} \nE: {option_a4}' + '\nAnswer: ' for question, option_a0, option_a1, option_a2, option_a3, option_a4 in zip(questions, options_a0, options_a1, options_a2, options_a3, options_a4)]
 
     text_output = answers
 

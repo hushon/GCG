@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import os
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import argparse
 from torch import cuda
 import time
@@ -34,7 +34,7 @@ def parse_args():
     parser.add_argument('--warmup_start_lr', type=float, default=1e-8)
     parser.add_argument('--min_lr', type=float, default=5e-6, help='min_lr for consine annealing')
     parser.add_argument('--max_T', type=int, default=30, help='epoches for lr->min_lr / min_lr->lr')
-    parser.add_argument('--eval_step', type=int, default=0.1, help="eval every 1/eval_step epoch")
+    parser.add_argument('--eval_step', type=int, default=10, help="eval every 1/eval_step epoch")
     parser.add_argument('--save_ckpt', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default='nextqa', choices=['nextqa'])
@@ -252,7 +252,7 @@ def train(args, train_dataset, val_dataset, model):
         train_reg_loss = 0
         train_info_loss = 0
         train_acc = 0
-        for step, data in enumerate(tqdm(train_loader, disable=not dist.get_rank() == 0)):
+        for step, data in enumerate(tqdm(train_loader, disable=not dist.get_rank() == 0, desc=f"Epoch {epoch}/{args.epoch}")):
             model.train()
             if args.dataset == 'nextqa':
                 text_input, text_output, questions, options_a0, options_a1, options_a2, options_a3, options_a4 = prepare_inputs(args, data)
@@ -292,7 +292,7 @@ def train(args, train_dataset, val_dataset, model):
 
             optimizer.zero_grad()                           
 
-            if step % int(len(train_loader)/args.eval_step) == 0 and epoch > 0 and step >= int(len(train_loader)/args.eval_step) and step < len(train_loader)*0.9:
+            if step % int(len(train_loader)/args.eval_step) == 0 and epoch >= 0 and step >= int(len(train_loader)/args.eval_step) and step < len(train_loader)*0.9:
                 val_loss, val_acc, overall_acc = eval(args, val_loader, model)
                 if dist.get_rank() == 0:
                     print('epoch:{}/{} step:{}  val_loss:{} val_acc:{}'

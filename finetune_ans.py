@@ -34,7 +34,7 @@ def parse_args():
     parser.add_argument('--warmup_start_lr', type=float, default=1e-8)
     parser.add_argument('--min_lr', type=float, default=5e-6, help='min_lr for consine annealing')
     parser.add_argument('--max_T', type=int, default=30, help='epoches for lr->min_lr / min_lr->lr')
-    parser.add_argument('--eval_step', type=int, default=1, help="eval every 1/eval_step epoch")
+    parser.add_argument('--eval_step', type=int, default=0.1, help="eval every 1/eval_step epoch")
     parser.add_argument('--save_ckpt', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default='nextqa', choices=['nextqa'])
@@ -137,7 +137,7 @@ def eval(args, val_loader, model):
             "length_penalty":1
             }
 
-        with torch.cuda.amp.autocast(enabled=True, dtype=model.module.dtype): # 前后开启autocast
+        with torch.cuda.amp.autocast(enabled=True, dtype=model.module.dtype): # Enable autocast before and after
             with torch.no_grad():
                 outputs = model(samples)
                 pred_texts = model.module.generate(samples, **generate_kwargs)
@@ -185,7 +185,7 @@ def eval(args, val_loader, model):
     with open(f'files/{args.dataset}_records_{dist.get_rank()}.json', 'w') as f:
         json.dump(acc_records, f, indent=2)
 
-    # 同步所有进程
+    # Synchronize all processes
     dist.barrier()
     
     for r in range(dist.get_world_size()):
@@ -197,7 +197,7 @@ def eval(args, val_loader, model):
                         print('Overall Acc: ', overall_acc)
                         print('Class Acc: ', class_acc)
  
-    # 同步所有进程
+    # Synchronize all processes
     dist.barrier()
     if dist.get_rank() == 0:
         folder_path = 'files/'
@@ -207,7 +207,7 @@ def eval(args, val_loader, model):
             if os.path.isfile(file_path):
                 os.remove(file_path)  
 
-    # 对不同进程上的评价指标进行平均
+    # Average the evaluation metrics across different processes
     val_loss = round(reduce_metric(val_loss)/len(val_loader), 4)
     val_vqa_loss = round(reduce_metric(val_vqa_loss)/len(val_loader), 4)
     val_reg_loss = round(reduce_metric(val_reg_loss)/len(val_loader), 4)
@@ -227,7 +227,7 @@ def train(args, train_dataset, val_dataset, model):
 
 
     if args.mode == 'grounding':
-        ignored_params = list(map(id, model.module.grounding.parameters())) # 返回的是parameters的 内存地址
+        ignored_params = list(map(id, model.module.grounding.parameters())) # Returns the memory addresses of the parameters
         base_params = filter(lambda p: p.requires_grad and id(p) not in ignored_params, model.parameters()) 
         optimizer = torch.optim.AdamW([
         {'params': base_params},
@@ -239,12 +239,12 @@ def train(args, train_dataset, val_dataset, model):
 
     max_acc = 0
 
-    scaler = torch.cuda.amp.GradScaler() #训练前实例化一个GradScaler对象
+    scaler = torch.cuda.amp.GradScaler() # Instantiate a GradScaler object before training
 
     for epoch in range(args.epoch):
 
         model.train()
-        # 设置sampler的epoch，DistributedSampler需要这个来维持各个进程之间的相同随机数种子
+        # Set the epoch for the sampler, DistributedSampler needs this to maintain the same random seed across processes
         train_loader.sampler.set_epoch(epoch)
         start = time.time()
         train_loss = 0
@@ -270,7 +270,7 @@ def train(args, train_dataset, val_dataset, model):
                         "answers_id": data["answers_id"]
                     }
 
-            with torch.cuda.amp.autocast(enabled=True, dtype=model.module.dtype): # 前后开启autocast
+            with torch.cuda.amp.autocast(enabled=True, dtype=model.module.dtype): # Enable autocast before and after
                 outputs = model(samples)
                 with torch.no_grad():
                     # pred_texts = model.module.generate(samples, **generate_kwargs)
@@ -283,9 +283,9 @@ def train(args, train_dataset, val_dataset, model):
             train_info_loss += outputs['infoNCE_loss'].item() 
             train_acc += compute_acc(bs = args.bs, labels = text_output, preds = pred_texts)
 
-            scaler.scale(loss).backward()  #为了梯度放大
+            scaler.scale(loss).backward()  # For gradient scaling
             scaler.step(optimizer)
-            scaler.update()  #准备着，看是否要增大scaler
+            scaler.update()  # Check if scaler needs to be increased
 
             if args.use_schedule:
                 lr_schedule.step(cur_epoch=epoch, cur_step=step)
@@ -302,7 +302,7 @@ def train(args, train_dataset, val_dataset, model):
                     if args.save_ckpt:
                         torch.save(model.module.state_dict(), './{}/{}_{}_{}.pth'.format(args.experiment_path, f'{args.model}_{args.dataset}', epoch+1, overall_acc))
 
-        # 对不同进程上的评价指标进行平均
+        # Average the evaluation metrics across different processes
         train_loss = round(reduce_metric(train_loss)/len(train_loader), 4)
         train_vqa_loss = round(reduce_metric(train_vqa_loss)/len(train_loader), 4)
         train_reg_loss = round(reduce_metric(train_reg_loss)/len(train_loader), 4)

@@ -269,6 +269,23 @@ def train(args, train_dataset, val_dataset, model):
                         "answers_text": data["answers_text"],
                         "answers_id": data["answers_id"]
                     }
+                
+                """
+                "text_input": ['Question: how did the lady in grey direct the dog on what it should do?\nOptions: \nA: pull the leash \nB: brush the dog \nC: caress the dog \nD: carry it in her arm \nE: hand gestures and pointing\nAnswer: ', 'Question: what is the lady in jeans doing?\nOptions: \nA: singing \nB: stand up \nC: lift up her leg \nD: mopping the floor \nE: playing\nAnswer: ', 'Question: why are the group of the people in the mountains?\nOptions: \nA: finding dog \nB: it is winter \nC: hiking trip \nD: scared \nE: campfire\nAnswer: ', 'Question: why did the baby reach for the boy near the end?\nOptions: \nA: happy and laughing \nB: help the baby fix the toy \nC: support the baby \nD: play with it \nE: fall and pounce on the boy\nAnswer: ']
+                "text_output": ['E', 'D', 'C', 'E']
+                "questions": ['how did the lady in grey direct the dog on what it should do?', 'what is the lady in jeans doing?', 'why are the group of the people in the mountains?', 'why did the baby reach for the boy near the end?']
+                "options_a0": ['pull the leash', 'singing', 'finding dog', 'happy and laughing']
+                "options_a1": ['brush the dog', 'stand up', 'it is winter', 'help the baby fix the toy']
+                "options_a2": ['caress the dog', 'lift up her leg', 'hiking trip', 'support the baby']
+                "options_a3": ['carry it in her arm', 'mopping the floor', 'scared', 'play with it']
+                "options_a4": ['hand gestures and pointing', 'playing', 'campfire', 'fall and pounce on the boy']
+                "answers_text": ['hand gestures and pointing', 'mopping the floor', 'hiking trip', 'fall and pounce on the boy']
+                "answers_id": tensor([4, 3, 2, 4])
+                """
+                
+                # if dist.get_rank() == 0:
+                #     breakpoint()
+                # torch.distributed.barrier()
 
             with torch.cuda.amp.autocast(enabled=True, dtype=model.module.dtype): # Enable autocast before and after
                 outputs = model(samples)

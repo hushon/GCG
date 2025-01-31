@@ -25,7 +25,7 @@ def parse_args():
 
     parser.add_argument('--word_size', default=1, help="n_gpus")
     parser.add_argument('--bs', type=int, default=4)
-    parser.add_argument('--eval_bs', type=int, default=4)
+    parser.add_argument('--eval_bs', type=int, default=16)
     parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--grounding_lr', type=float, default=7e-5) # 3e-5
@@ -34,7 +34,7 @@ def parse_args():
     parser.add_argument('--warmup_start_lr', type=float, default=1e-8)
     parser.add_argument('--min_lr', type=float, default=5e-6, help='min_lr for consine annealing')
     parser.add_argument('--max_T', type=int, default=30, help='epoches for lr->min_lr / min_lr->lr')
-    parser.add_argument('--eval_step', type=int, default=10, help="eval every 1/eval_step epoch")
+    parser.add_argument('--eval_step', type=int, default=1, help="eval every 1/eval_step epoch")
     parser.add_argument('--save_ckpt', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default='nextqa', choices=['nextqa'])
@@ -106,8 +106,8 @@ def eval(args, val_loader, model):
     overall_acc = 0
 
     acc_records = []
-
-    for step, data in enumerate(val_loader):
+    
+    for step, data in enumerate(tqdm(val_loader, disable=not dist.get_rank() == 0, desc=f"validation")):
 
         if args.dataset == 'nextqa':
             text_input, text_output, questions, options_a0, options_a1, options_a2, options_a3, options_a4 = prepare_inputs(args, data)
@@ -214,7 +214,8 @@ def eval(args, val_loader, model):
     val_info_loss = round(reduce_metric(val_info_loss)/len(val_loader), 4)
     val_acc = round(reduce_metric(val_acc)/len(val_loader), 4)
     model.train()
-    return val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc
+    # return val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc
+    return val_loss, val_acc, overall_acc
 
 
 def train(args, train_dataset, val_dataset, model):
@@ -223,7 +224,7 @@ def train(args, train_dataset, val_dataset, model):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.bs, sampler=train_sampler, pin_memory=True, shuffle=False, drop_last=True, num_workers=4)
 
     val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.eval_bs, sampler=val_sampler, pin_memory=True, shuffle=False, drop_last=True, num_workers=4)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.eval_bs, sampler=val_sampler, pin_memory=True, shuffle=False, drop_last=True, num_workers=8)
 
 
     if args.mode == 'grounding':
@@ -309,15 +310,16 @@ def train(args, train_dataset, val_dataset, model):
 
             optimizer.zero_grad()                           
 
-            if step % int(len(train_loader)/args.eval_step) == 0 and epoch >= 0 and step >= int(len(train_loader)/args.eval_step) and step < len(train_loader)*0.9:
-                val_loss, val_acc, overall_acc = eval(args, val_loader, model)
-                if dist.get_rank() == 0:
-                    print('epoch:{}/{} step:{}  val_loss:{} val_acc:{}'
-                        .format(epoch + 1, args.epoch, step, val_loss, val_acc))
-                if (overall_acc >= max_acc):    
-                    max_acc = overall_acc
-                    if args.save_ckpt:
-                        torch.save(model.module.state_dict(), './{}/{}_{}_{}.pth'.format(args.experiment_path, f'{args.model}_{args.dataset}', epoch+1, overall_acc))
+            # # if step % int(len(train_loader)/args.eval_step) == 0 and epoch >= 0 and step >= int(len(train_loader)/args.eval_step) and step < len(train_loader)*0.9:
+            # if step % int(len(train_loader)/args.eval_step) == 0:
+            #     val_loss, val_acc, overall_acc = eval(args, val_loader, model)
+            #     if dist.get_rank() == 0:
+            #         print('epoch:{}/{} step:{}  val_loss:{} val_acc:{}'
+            #             .format(epoch + 1, args.epoch, step, val_loss, val_acc))
+            #     if (overall_acc >= max_acc):    
+            #         max_acc = overall_acc
+            #         if args.save_ckpt:
+            #             torch.save(model.module.state_dict(), './{}/{}_{}_{}.pth'.format(args.experiment_path, f'{args.model}_{args.dataset}', epoch+1, overall_acc))
 
         # Average the evaluation metrics across different processes
         train_loss = round(reduce_metric(train_loss)/len(train_loader), 4)
@@ -325,7 +327,8 @@ def train(args, train_dataset, val_dataset, model):
         train_reg_loss = round(reduce_metric(train_reg_loss)/len(train_loader), 4)
         train_info_loss = round(reduce_metric(train_info_loss)/len(train_loader), 4)
         train_acc = round(reduce_metric(train_acc)/len(train_loader), 4)
-        val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc = eval(args, val_loader, model)
+        # val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc = eval(args, val_loader, model)
+        val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc = 0., 0., 0., 0., 0., 0.
         
         end = time.time()
         if dist.get_rank() == 0:

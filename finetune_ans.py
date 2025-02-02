@@ -15,6 +15,7 @@ from datasets.nextqa import NEXTQADataset
 from torch.backends import cudnn
 from utils.utils import *
 from utils.optims import *
+import wandb
 
 
 def parse_args():
@@ -341,10 +342,28 @@ def train(args, train_dataset, val_dataset, model):
                 if args.save_ckpt:
                     torch.save(model.module.state_dict(), './{}/{}_{}_{}.pth'.format(args.experiment_path, f'{args.model}_{args.dataset}', epoch+1, overall_acc))
 
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                "train_acc": train_acc,
+                "val_acc": val_acc,
+                "train_vqa_loss": train_vqa_loss,
+                "train_reg_loss": train_reg_loss,
+                "train_info_loss": train_info_loss,
+                "val_vqa_loss": val_vqa_loss,
+                "val_reg_loss": val_reg_loss,
+                "val_info_loss": val_info_loss,
+                "overall_acc": overall_acc
+            })
+
     dist.destroy_process_group()
 
 if __name__ == '__main__':
     args = parse_args()
+
+    wandb.init(project="keyframe", entity="hyounguk-shon", mode="online", save_code=True)
+    wandb.config.update(args)
 
     if args.dataset == 'nextqa':
         train_dataset = NEXTQADataset(anno_path='../nextqa/annotations_mc/train.csv', frame_count=args.frame_count)

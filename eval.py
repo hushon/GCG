@@ -22,9 +22,8 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=3407)
     parser.add_argument('--local_rank', default=0, type=int, help='node rank for distributed training')
 
-    parser.add_argument('--word_size', default=1, help="n_gpus")
     parser.add_argument('--bs', type=int, default=4)
-    parser.add_argument('--eval_bs', type=int, default=16)
+    parser.add_argument('--eval_bs', type=int, default=8)
     parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--grounding_lr', type=float, default=7e-5) # 3e-5
@@ -132,12 +131,12 @@ def eval(args, val_loader, model):
             "length_penalty":1
             }
 
-        with torch.cuda.amp.autocast(enabled=True, dtype=model.dtype): # Enable autocast before and after
+        with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16): # Enable autocast before and after
             with torch.no_grad():
                 outputs = model(samples)
                 pred_texts = model.generate(samples, **generate_kwargs)
 
-        for i in range(args.eval_bs):
+        for i in range(len(data['qids'])):
             qid = data['qids'][i]
             video_id = data['video_ids'][i]
             type = data['types'][i]
@@ -212,11 +211,11 @@ def eval(args, val_loader, model):
         print('Class Acc: ', class_acc)
 
     # Average the evaluation metrics across different processes
-    val_loss = round(val_loss/len(val_loader), 4)
-    val_vqa_loss = round(val_vqa_loss/len(val_loader), 4)
-    val_reg_loss = round(val_reg_loss/len(val_loader), 4)
-    val_info_loss = round(val_info_loss/len(val_loader), 4)
-    val_acc = round(val_acc/len(val_loader), 4)
+    val_loss = val_loss/len(val_loader)
+    val_vqa_loss = val_vqa_loss/len(val_loader)
+    val_reg_loss = val_reg_loss/len(val_loader)
+    val_info_loss = val_info_loss/len(val_loader)
+    val_acc = val_acc/len(val_loader)
     model.train()
     # return val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc
     return val_loss, val_acc, overall_acc
@@ -256,7 +255,8 @@ if __name__ == '__main__':
    
     if 't5' in args.model:
         model = Blip2T5Instruct(
-            dtype=torch.bfloat16,
+            # dtype=torch.bfloat16,
+            dtype=torch.float32,
             frame_num=args.frame_count,
             mode = args.mode,
             window_size = args.window_size,
@@ -268,7 +268,7 @@ if __name__ == '__main__':
             use_lora = args.use_lora
         )        
     
-    model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_9_0.0.pth', map_location='cpu'))
+    model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_8_0.0.pth', map_location='cpu'))
 
     device = torch.device('cuda', args.local_rank)
     init_seeds(args.seed)

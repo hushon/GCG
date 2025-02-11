@@ -128,7 +128,8 @@ def eval(args, val_loader, model):
             "temperature":1,
             "top_p":0.9,
             "repetition_penalty":1,
-            "length_penalty":1
+            "length_penalty":1,
+            # "output_scores": True,
             }
 
         with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16): # Enable autocast before and after
@@ -152,6 +153,7 @@ def eval(args, val_loader, model):
                 'label': label,
                 'pred': pred
                 })
+            
 
         loss = outputs['loss']
         val_loss += loss.item() 
@@ -218,6 +220,8 @@ def eval(args, val_loader, model):
     val_acc = val_acc/len(val_loader)
     model.train()
     # return val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc
+
+    torch.save(acc_records, 'acc_records.pth')
     return val_loss, val_acc, overall_acc
 
 def train(args, train_dataset, val_dataset, model):
@@ -268,7 +272,7 @@ if __name__ == '__main__':
             use_lora = args.use_lora
         )        
     
-    model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_8_0.0.pth', map_location='cpu'))
+    model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_5_0.0.pth', map_location='cpu'))
 
     device = torch.device('cuda', args.local_rank)
     init_seeds(args.seed)

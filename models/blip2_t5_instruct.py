@@ -492,8 +492,11 @@ class Blip2T5Instruct(nn.Module):
                 **generate_kwargs
             )
             output_text = self.t5_tokenizer.batch_decode(
-                outputs, skip_special_tokens=True
+                outputs['sequences'], skip_special_tokens=True
             )
+
+        if 'sequences_scores' in outputs:
+            return output_text, outputs['sequences_scores']
 
         return output_text
 

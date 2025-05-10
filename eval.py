@@ -18,7 +18,6 @@ from utils.optims import *
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment_path', type=str, default='experiments')
     parser.add_argument('--seed', type=int, default=3407)
     parser.add_argument('--local_rank', default=0, type=int, help='node rank for distributed training')
 
@@ -129,13 +128,15 @@ def eval(args, val_loader, model):
             "top_p":0.9,
             "repetition_penalty":1,
             "length_penalty":1,
-            # "output_scores": True,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+            # "output_logits": True,
             }
 
-        with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16): # Enable autocast before and after
+        with torch.cuda.amp.autocast(enabled=True, dtype=torch.float32): # Enable autocast before and after
             with torch.no_grad():
                 outputs = model(samples)
-                pred_texts = model.generate(samples, **generate_kwargs)
+                pred_texts, sequences_scores = model.generate(samples, **generate_kwargs)
 
         for i in range(len(data['qids'])):
             qid = data['qids'][i]
@@ -151,9 +152,9 @@ def eval(args, val_loader, model):
                 'type': type,
                 'input': input_text,
                 'label': label,
-                'pred': pred
+                'pred': pred,
+                'sequences_scores': sequences_scores[i].cpu()
                 })
-            
 
         loss = outputs['loss']
         val_loss += loss.item() 
@@ -221,7 +222,7 @@ def eval(args, val_loader, model):
     model.train()
     # return val_loss, val_vqa_loss, val_reg_loss, val_info_loss, val_acc, overall_acc
 
-    torch.save(acc_records, 'acc_records.pth')
+    # torch.save(acc_records, 'acc_records.pth')
     return val_loss, val_acc, overall_acc
 
 def train(args, train_dataset, val_dataset, model):
@@ -273,6 +274,7 @@ if __name__ == '__main__':
         )        
     
     model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_5_0.0.pth', map_location='cpu'))
+    # model.load_state_dict(torch.load('./experiments_uniform/t5-xl_nextqa_1_0.0.pth', map_location='cpu'))
 
     device = torch.device('cuda', args.local_rank)
     init_seeds(args.seed)

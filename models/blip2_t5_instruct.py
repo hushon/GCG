@@ -368,7 +368,17 @@ class Blip2T5Instruct(nn.Module):
         
         label_probs = torch.einsum("b t d, b d -> b t", l2_norm(image_embeds_for_selection), l2_norm(label_embeds_for_selection))
         image_embeds = rearrange(image_embeds, "(b t) n d -> b t n d", t=framecount) # [bs, frame_count, 257, 1408] 
-        image_embeds, regression_loss, infoNCE_loss = self.grounding(Q=question_embeds_for_selection, K=image_embeds_for_selection, V=image_embeds, answer_embeds=label_embeds_for_selection, label_probs=label_probs, answers_id=samples["answers_id"].to(self.device) if 'answers_id' in samples.keys() else None) # [bs, 4, 257, 1408]
+        # types = samples['types']
+        types = samples['pred_types']
+        image_embeds, regression_loss, infoNCE_loss = self.grounding(
+            Q=question_embeds_for_selection, 
+            K=image_embeds_for_selection, 
+            V=image_embeds, 
+            answer_embeds=label_embeds_for_selection, 
+            label_probs=label_probs, 
+            answers_id=samples["answers_id"].to(self.device) if 'answers_id' in samples.keys() else None, 
+            types=types  # 미리 예측한 QA type을 넣어주는곳
+        ) # [bs, 4, 257, 1408]
 
         image_embeds = rearrange(image_embeds, "b w n d -> (b w) n d") # [bs*4, 257, 1408] 
         query_tokens = self.query_tokens.expand(bs*self.window_size, -1, -1) # [bs*frame_count, 32, 768]
@@ -485,6 +495,37 @@ class Blip2T5Instruct(nn.Module):
             encoder_atts = torch.cat([atts_t5, input_tokens.attention_mask], dim=1)
             inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
             inputs_embeds = torch.cat([inputs_t5, inputs_embeds], dim=1)
+
+            outputs = self.t5_model.generate(
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_atts,
+                **generate_kwargs
+            )
+            output_text = self.t5_tokenizer.batch_decode(
+                outputs['sequences'], skip_special_tokens=True
+            )
+
+        if 'sequences_scores' in outputs:
+            return output_text, outputs['sequences_scores']
+
+        return output_text
+
+    @torch.no_grad()
+    def text_generate(
+        self,
+        text_input,
+        **generate_kwargs
+    ):
+
+        with self.maybe_autocast():
+            input_tokens = self.t5_tokenizer(
+                text_input,
+                padding="longest",
+                return_tensors="pt"
+            ).to("cuda")
+
+            encoder_atts = input_tokens.attention_mask
+            inputs_embeds = self.t5_model.encoder.embed_tokens(input_tokens.input_ids)
 
             outputs = self.t5_model.generate(
                 inputs_embeds=inputs_embeds,

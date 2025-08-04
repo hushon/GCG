@@ -335,7 +335,7 @@ class Grounding(nn.Module):
         infoNCE_loss = infoNCE_loss/self.window_size
         return infoNCE_loss
 
-    def forward(self, Q, K, V, answer_embeds, label_probs=None, answers_id=None):
+    def forward(self, Q, K, V, answer_embeds, label_probs=None, answers_id=None, types=None):
         """
         baseline:72.64
         oracle: 79.09
@@ -368,13 +368,37 @@ class Grounding(nn.Module):
         if self.training:
             selection_mask = self.get_indicator(pred_gaussians, self.window_size) # [bs, window_size, frame_num]
             selected_V = torch.einsum("b k t, b t q d -> b k q d", selection_mask, V) # [bs, window_size, query_num, dim]
+        # else:
+        #     indicators = self.HardTopK(self.window_size, pred_gaussians) # [bs, window_size]
+        #     selection_mask = torch.zeros(K.shape[0], self.window_size, K.shape[1]).to(self.device) # [bs, window_size, frame_num]
+        #     for i in range(K.shape[0]):
+        #         for j in range(self.window_size):
+        #             selection_mask[i][j][indicators[i][j]] = 1
+        #     selected_V = torch.einsum("b k t, b t q d -> b k q d", selection_mask, V) # [bs, window_size, query_num, dim]
         else:
-            indicators = self.HardTopK(self.window_size, pred_gaussians) # [bs, window_size]
+            # 테스트시에는 AKS 프레임 선택 알고리즘 적용
+            from frame_select import select_keyframes_from_scores, select_keyframes_for_sample
+            # indicators = select_keyframes_from_scores(itm_outs_all=pred_gaussians.cpu().numpy(), fn_outs_all=[list(range(32))]*len(pred_gaussians), max_num_frames=4, ratio=1, t1=0.65, t2=-100, all_depth=5)
+
+            itm_outs_all = pred_gaussians.cpu().numpy()
+            indicators = []
+            for i in range(len(itm_outs_all)):
+                if types[i] == "C":
+                    t1 = 0.700
+                elif types[i] == "T":
+                    t1 = 0.650
+                elif types[i] == "D":
+                    t1 = 0.750
+                else:
+                    raise ValueError
+                indicators.append(select_keyframes_for_sample(itm_out=itm_outs_all[i], fn_out=list(range(32)), max_num_frames=4, ratio=1, t1=t1, t2=-100, all_depth=5))
+
             selection_mask = torch.zeros(K.shape[0], self.window_size, K.shape[1]).to(self.device) # [bs, window_size, frame_num]
             for i in range(K.shape[0]):
                 for j in range(self.window_size):
                     selection_mask[i][j][indicators[i][j]] = 1
             selected_V = torch.einsum("b k t, b t q d -> b k q d", selection_mask, V) # [bs, window_size, query_num, dim]
+
         return selected_V, regression_loss, infoNCE_loss
 
 # bs = 10    

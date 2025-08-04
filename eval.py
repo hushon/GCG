@@ -16,13 +16,34 @@ from utils.utils import *
 from utils.optims import *
 
 
+q_template = """Categorize the following question into one of (a) causal question, (b) temporal question or (c) descriptive question. 
+- Explanations about each question type: 
+Causal questions are designed to explain actions, either uncovering the intentions of the previously occurring actions 
+or stating causes for subsequent actions. Questions in the causal group ask either why the objects act in a certain manner 
+or how (what did they do) to bring about an observed effect. (e.g., "**why** was the toddler in red crying at the end of the video?", 
+"**how** did the lady help the toddler who fell at the end?") 
+Temporal questions assess the model’s capability of reasoning about temporal relationships between actions. Temporal actions, 
+while related to causality, are determined only by order of occurrence. Hence, questions of this type ask about the previous 
+(what ... do before ...), present (what... doing when/while/as ...) or next actions (what/how ... do/react after ...). 
+(e.g., "what was the lady doing **before** the toddler in red fell off the stone?", "how did the lady react **after** the toddler in red 
+fell off the stone?", "what was the boy doing **when** the toddler fell backwards from the stone?") 
+Descriptive questions focus on scene description of the videos (e.g., the places, objects / attributes, and main actions 
+/ events). These questions complement causal and temporal questions to make up a holistic video comprehension and also 
+allow for comparison between different types of questions. Specifically, the questions cover binary choices (yes/no, or 
+the answers are indicated in the questions, e.g., “... tired or energetic?”), location (where), counting (how many) and 
+other free-form questions. (e.g., "did the toddler in red cry in the video?", "where was this video taken?", "how many kids 
+are shown in the video?", "what is this video about?") 
+- Instructions for your answer: prompt "C" if causal, "T" if temporal, and "D" if descriptive. 
+- Question: {}"""
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=3407)
     parser.add_argument('--local_rank', default=0, type=int, help='node rank for distributed training')
 
     parser.add_argument('--bs', type=int, default=4)
-    parser.add_argument('--eval_bs', type=int, default=8)
+    parser.add_argument('--eval_bs', type=int, default=4)
     parser.add_argument('--epoch', type=int, default=10)
     parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--grounding_lr', type=float, default=7e-5) # 3e-5
@@ -115,7 +136,8 @@ def eval(args, val_loader, model):
                     "options_a4": options_a4,
                     "frame_features": data["frame_features"].cuda(args.local_rank),
                     "answers_text": data["answers_text"],
-                    "answers_id": data["answers_id"]
+                    "answers_id": data["answers_id"],
+                    "types": data["types"]
                 }
 
         generate_kwargs = {
@@ -135,8 +157,12 @@ def eval(args, val_loader, model):
 
         with torch.cuda.amp.autocast(enabled=True, dtype=torch.float32): # Enable autocast before and after
             with torch.no_grad():
-                outputs = model(samples)
-                pred_texts, sequences_scores = model.generate(samples, **generate_kwargs)
+                prompts = [q_template.format(q) for q in samples['questions']]
+                pred_texts, sequences_scores = model.text_generate(prompts, **generate_kwargs)  # classify the QA type of the given question
+                samples['pred_types'] = pred_texts  # append the predicted QA type to the input sample data
+
+                outputs = model(samples)  # loss 계산 ('loss', 'vqa_loss', 'regression_loss', 'infoNCE_loss')
+                pred_texts, sequences_scores = model.generate(samples, **generate_kwargs)  # answer generation
 
         for i in range(len(data['qids'])):
             qid = data['qids'][i]

@@ -20,7 +20,7 @@ import wandb
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment_path', type=str, default='experiments')
+    parser.add_argument('--experiment_path', type=str, default='experiments_grounding')
     parser.add_argument('--seed', type=int, default=3407)
     parser.add_argument('--local_rank', default=0, type=int, help='node rank for distributed training')
 
@@ -303,6 +303,8 @@ def train(args, train_dataset, val_dataset, model):
             train_acc += compute_acc(bs = args.bs, labels = text_output, preds = pred_texts)
 
             scaler.scale(loss).backward()  # For gradient scaling
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1e-2, error_if_nonfinite=True)
             scaler.step(optimizer)
             scaler.update()  # Check if scaler needs to be increased
 
@@ -333,10 +335,8 @@ def train(args, train_dataset, val_dataset, model):
         
         end = time.time()
         if dist.get_rank() == 0:
-            print('epoch:{}/{}  time:{}h  lr:{}  batchsize:{}  train_loss:{}  val_loss:{}  train_acc: {}  val_acc:{}'
-                .format(epoch + 1, args.epoch, str(round((end-start)/3600, 2)), args.lr, args.bs, train_loss, val_loss, train_acc, val_acc))
-            print('train_vqa_loss:{}  train_reg_loss:{}  train_info_loss: {}  val_vqa_loss:{}  val_reg_loss:{}  val_info_loss: {}'
-                .format(train_vqa_loss, train_reg_loss, train_info_loss, val_vqa_loss, val_reg_loss, val_info_loss))
+            print(f'epoch:{epoch + 1}/{args.epoch}  time:{(end-start)/3600:.2f}h  lr:{args.lr}  batchsize:{args.bs}  train_loss:{train_loss}  val_loss:{val_loss}  train_acc: {train_acc}  val_acc:{val_acc}')
+            print(f'train_vqa_loss:{train_vqa_loss}  train_reg_loss:{train_reg_loss}  train_info_loss: {train_info_loss}  val_vqa_loss:{val_vqa_loss}  val_reg_loss:{val_reg_loss}  val_info_loss: {val_info_loss}')
             if (overall_acc >= max_acc):    
                 max_acc = overall_acc
                 if args.save_ckpt:
@@ -362,7 +362,7 @@ def train(args, train_dataset, val_dataset, model):
 if __name__ == '__main__':
     args = parse_args()
 
-    wandb.init(project="keyframe", entity="hyounguk-shon", mode="online", save_code=True)
+    wandb.init(project="keyframe", entity="hyounguk-shon", save_code=True)
     wandb.config.update(args)
 
     if args.dataset == 'nextqa':

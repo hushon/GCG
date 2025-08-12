@@ -399,6 +399,8 @@ class Grounding(nn.Module):
                     selection_mask[i][j][indicators[i][j]] = 1
             selected_V = torch.einsum("b k t, b t q d -> b k q d", selection_mask, V) # [bs, window_size, query_num, dim]
 
+            self.indicators = indicators # for keyframe selection inference demo
+
         return selected_V, regression_loss, infoNCE_loss
 
 # bs = 10    

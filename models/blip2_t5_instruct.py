@@ -370,6 +370,7 @@ class Blip2T5Instruct(nn.Module):
         image_embeds = rearrange(image_embeds, "(b t) n d -> b t n d", t=framecount) # [bs, frame_count, 257, 1408] 
         # types = samples['types']
         types = samples['pred_types']
+        # types = None
         image_embeds, regression_loss, infoNCE_loss = self.grounding(
             Q=question_embeds_for_selection, 
             K=image_embeds_for_selection, 

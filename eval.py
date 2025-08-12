@@ -299,8 +299,10 @@ if __name__ == '__main__':
             use_lora = args.use_lora
         )        
     
-    model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_5_0.0.pth', map_location='cpu'))
+    # model.load_state_dict(torch.load('./experiments/t5-xl_nextqa_5_0.0.pth', map_location='cpu'))
     # model.load_state_dict(torch.load('./experiments_uniform/t5-xl_nextqa_1_0.0.pth', map_location='cpu'))
+    # model.load_state_dict(torch.load('./t5-xl_nextqa_10_0.pth', map_location='cpu'))
+    model.load_state_dict(torch.load('./t5-xl_nextqa_1_0.pth', map_location='cpu'))
 
     device = torch.device('cuda', args.local_rank)
     init_seeds(args.seed)
